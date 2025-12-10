@@ -171,6 +171,23 @@ def plot_comparison():
 
 def process_raw_data_by_clip(folder_name, path_dir):
     '''Generate usable Json dictionary from original labeled data'''
+    '''
+        Output JSON structure:
+        {
+        "action": "Walking",
+        "id_action": 3,
+        "skeleton": [
+            [[x1, y1], [x2, y2], ...],  // Skeleton data for frame 1
+            [[x1, y1], [x2, y2], ...],  
+            // ... for each valid frame
+        ],
+        "id_person": 1,
+        "frame": [100, 101, 103, ...], // Frame numbers corresponding to the skeleton data 
+        "file_name": "action_clip_name_1.json", 
+        "folder_name": "cleaning",
+        "sample_name": "clip_name_1-1" // Video name and person id
+        }
+    '''
 
     # Windows Version
     directory = os.path.join(path_dir, folder_name).replace('\\', '/')
@@ -222,8 +239,9 @@ def process_raw_data_by_clip(folder_name, path_dir):
                 for a_value in k['action']:
                     ref_id = k['id_person']
                     ref_action = a_value
-                    # init list for frame number
+                    # init list for frame number and for person bboxes
                     person_action_frame = []
+                    person_action_bbox = []
                     # for each frame
                     for i in data_loaded:
                         # loop each frame: search the next frame's (id, action) data
@@ -246,6 +264,22 @@ def process_raw_data_by_clip(folder_name, path_dir):
                                     # add the person of the action's frame number
                                     person_action_frame.append(i['frame'])
 
+                                    # append bbox for this valid frame (x1,y1,w,h -> convert to x1,y1,x2,y2)
+                                    if 'bbox' in j and j['bbox'] is not None:
+                                        try:
+                                            bx = j['bbox']
+                                            # bbox in raw json appears as [x, y, w, h]
+                                            x1 = bx[0]
+                                            y1 = bx[1]
+                                            x2 = bx[0] + bx[2]
+                                            y2 = bx[1] + bx[3]
+                                            person_action_bbox.append([x1, y1, x2, y2])
+                                        except Exception:
+                                            # if bbox format unexpected, store as empty placeholder
+                                            person_action_bbox.append([0, 0, 0, 0])
+                                    else:
+                                        person_action_bbox.append([0, 0, 0, 0])
+
                                 # do not need to continue search the same pair (id, action) in this frame, directly go to the next frame
                                 # because in the same frame there is no two same (id, action)
                                 break
@@ -256,7 +290,8 @@ def process_raw_data_by_clip(folder_name, path_dir):
                         trimmed_file_name = file_name.split('.')[0][7:]
                         action_id = le.transform([ref_action])[0].item()
                         sample_name = trimmed_file_name + '-' + str(ref_id)
-                        dict_ske = {'action': ref_action, 'id_action': action_id, 'skeleton': data, 'id_person': ref_id, 'frame': person_action_frame, 'file_name': file_name, 'folder_name': folder_name, 'sample_name': sample_name}
+                        dict_ske = {'action': ref_action, 'id_action': action_id, 'skeleton': data, 'bbox': person_action_bbox, 'id_person': ref_id, 'frame': person_action_frame, 'file_name': file_name, 'folder_name': folder_name, 'sample_name': sample_name}
+                        dict_ske['video_path'] = os.path.join(folder_name, trimmed_file_name + '.mp4').replace('\\', '/')
 
                         # collect all the appeared (id, action) dictionaries to "dict_list_clip"
                         dict_list_clip.append(dict_ske)
@@ -401,6 +436,26 @@ def interpolate_missed_joints(data, num_clip, num_seq):
 
 ''' 3 step: merge folder data '''
 def merge_data_clip(folder_to_merge, recovered=True):
+    ''' 
+        Output JSON structure:
+        [
+            [
+                {"action": "cleaning", "skeleton": [ ... ]},
+                {"action": "cleaning", "skeleton": [ ... ]}
+            ], // Clip 1 of "cleaning" folder
+
+            [
+                {"action": "Cleaning", "skeleton": [ ... ]}
+            ], // Clip 2 of "cleaning" folder
+
+            [
+                {"action": "Walking", "skeleton": [ ... ]},
+                {"action": "WalkingWhileUsingPhone", "skeleton": [ ... ]}
+            ], // Clip 1 of "walking" folder
+
+            // ... and so on for all clips in all action folders
+        ]
+    '''
     clip_global_data_path = os.path.join(processing_folder_path, 'clip_global_data.json').replace('\\', '/')
     if recovered == False:
         copyfile(path_write + '/action_clip_folder/cleaning_clip_folder.json', clip_global_data_path)
@@ -433,6 +488,7 @@ def split_dict_to_data_label_clip(filename):
     data_loaded = json.load(f)
 
     list_data = []
+    list_bbox = []
     list_label = []
 
     # iterate each clip
@@ -440,33 +496,40 @@ def split_dict_to_data_label_clip(filename):
         # iterate each action sequence of a clip
         for s in i:
             list_data.append(s['skeleton'])
-            list_label.append({'action': s['action'], 'id_action': s['id_action'], 'file_name': s['file_name'], 'id_person': s['id_person'], 'frame': s['frame'], 'folder_name': s['folder_name'], 'sample_name': s['sample_name']})
+            list_bbox.append(s['bbox'])
+            list_label.append({'action': s['action'], 'video_path': s['video_path'], 'id_action': s['id_action'], 'file_name': s['file_name'], 'id_person': s['id_person'], 'frame': s['frame'], 'folder_name': s['folder_name'], 'sample_name': s['sample_name']})
 
     list_data = np.array(list_data, dtype=object)
     np.save(processing_folder_path + '/X_global_data_to_align.npy', list_data, allow_pickle=True)
+    list_bbox = np.array(list_bbox, dtype=object)
+    np.save(processing_folder_path + '/X_global_bbox_to_align.npy', list_bbox, allow_pickle=True)
     with open(processing_folder_path + '/Y_global_data.json', 'w') as fout:
         json.dump(list_label, fout)
 
 '''5 step: align frame to 300 (data and label frame field)'''
-def align_frames(data, label):
+def align_frames(data, data_bbox, label):
     count_overcome_max_frame = 0
     aligned = True
 
     for seq_idx, seq_item in enumerate(data):
         data[seq_idx] = np.array(seq_item)
+        data_bbox[seq_idx] = np.array(data_bbox[seq_idx])
         num_frame = data[seq_idx].shape[0]
         if num_frame > MAX_FRAME:
             count_overcome_max_frame = count_overcome_max_frame + 1
             data[seq_idx] =  data[seq_idx][0:MAX_FRAME]
+            data_bbox[seq_idx] = data_bbox[seq_idx][0:MAX_FRAME]
             label[seq_idx]['frame'] = label[seq_idx]['frame'][0:MAX_FRAME]
             continue
         elif MAX_FRAME % num_frame == 0:
             num_repeat = int (MAX_FRAME / num_frame)
             data[seq_idx] = np.tile(data[seq_idx], (num_repeat, 1, 1))
+            data_bbox[seq_idx] = np.tile(data_bbox[seq_idx], (num_repeat, 1))
             label[seq_idx]['frame'] = label[seq_idx]['frame'] * num_repeat
         elif int (MAX_FRAME / num_frame) == 1:
             # e.g. 226
             data[seq_idx] = np.vstack((data[seq_idx], data[seq_idx][0:MAX_FRAME-num_frame]))
+            data_bbox[seq_idx] = np.vstack((data_bbox[seq_idx], data_bbox[seq_idx][0:MAX_FRAME-num_frame]))
             label[seq_idx]['frame'] = label[seq_idx]['frame'] + label[seq_idx]['frame'][0:MAX_FRAME-num_frame]
         else:
             # e.g. 17
@@ -474,6 +537,8 @@ def align_frames(data, label):
             padding = MAX_FRAME % num_frame
             data[seq_idx] = np.tile(data[seq_idx], (num_repeat, 1, 1))
             data[seq_idx] = np.vstack((data[seq_idx], data[seq_idx][0:padding]))
+            data_bbox[seq_idx] = np.tile(data_bbox[seq_idx], (num_repeat, 1))
+            data_bbox[seq_idx] = np.vstack((data_bbox[seq_idx], data_bbox[seq_idx][0:padding]))
             label[seq_idx]['frame'] = label[seq_idx]['frame'] * num_repeat
             label[seq_idx]['frame'] = label[seq_idx]['frame'] + label[seq_idx]['frame'][0:padding]
 
@@ -490,15 +555,24 @@ def align_frames(data, label):
     with open(os.path.join(processing_folder_path, 'X_global_data.npy').replace('\\', '/'), 'wb') as fout:
         np.save(fout, data)
 
+    data_bbox = np.array(data_bbox.tolist())
+    with open(os.path.join(processing_folder_path, 'X_global_bbox.npy').replace('\\', '/'), 'wb') as fout:
+        np.save(fout, data_bbox)
+
     with open(processing_folder_path + '/Y_global_data.json', 'w') as fout:
         json.dump(label, fout)
 
 def split_TRAIN_TEST():
     X = np.load(processing_folder_path + '/X_global_data.npy', allow_pickle=True)
+    X_bbox = np.load(processing_folder_path + '/X_global_bbox.npy', allow_pickle=True)
     f = open(processing_folder_path + "/Y_global_data.json", )
     y = json.load(f)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, shuffle=False)
+    X_train, X_test, y_train, y_test, X_bbox_train, X_bbox_test = train_test_split(
+        X, y, X_bbox, 
+        test_size=0.33, 
+        shuffle=False
+    )
 
     ##### change data to format (N C T V M)  ######
     xx_tr = np.expand_dims(X_train, axis=4)
@@ -508,21 +582,28 @@ def split_TRAIN_TEST():
         np.save(fout, xx_tr)
     print("Write: " + os.path.join(output_data_folder_path, 'train_data_joint.npy').replace('\\', '/'))
 
+    with open(os.path.join(output_data_folder_path, 'train_data_bbox.npy').replace('\\', '/'), 'wb') as fout:
+        np.save(fout, X_bbox_train)
+    print("Write: " + os.path.join(output_data_folder_path, 'train_data_bbox.npy').replace('\\', '/'))
+
     ##### build (label, sample_name) tuple ######
     final_sample_name = []
     final_label = []
     final_frame = []
+    final_video_path = []
     for _, l_item in enumerate(y_train):
         final_sample_name.append(l_item['sample_name'])
         final_label.append(l_item['id_action'])
         final_frame.append(l_item['frame'])
+        final_video_path.append(l_item['video_path'])
 
     sample_name = final_sample_name
     label = final_label
     frame = final_frame
+    video_path = final_video_path
 
     with open(os.path.join(output_data_folder_path, 'train_label.pkl').replace('\\', '/'), 'wb') as f:
-        pickle.dump((sample_name, label, frame), f)
+        pickle.dump((sample_name, label, frame, video_path), f)
     print("Write: " + os.path.join(output_data_folder_path, 'train_label.pkl').replace('\\', '/'))
 
     # TEST
@@ -535,20 +616,27 @@ def split_TRAIN_TEST():
         np.save(fout, xx_test)
     print("Write: " + os.path.join(output_data_folder_path, 'val_data_joint.npy').replace('\\', '/'))
 
+    with open(os.path.join(output_data_folder_path, 'val_data_bbox.npy').replace('\\', '/'), 'wb') as fout:
+        np.save(fout, X_bbox_test)
+    print("Write: " + os.path.join(output_data_folder_path, 'val_data_bbox.npy').replace('\\', '/'))
+
     ##### build (sample_name, label) tuple ######
     final_sample_name = []
     final_label = []
     final_frame = []
+    final_video_path = []
     for _, l_item in enumerate(y_test):
         final_sample_name.append(l_item['sample_name'])
         final_label.append(l_item['id_action'])
         final_frame.append(l_item['frame'])
+        final_video_path.append(l_item['video_path'])
     label = final_label
     sample_name = final_sample_name
     frame = final_frame
+    video_path = final_video_path
 
     with open(os.path.join(output_data_folder_path, 'val_label.pkl').replace('\\', '/'), 'wb') as f:
-        pickle.dump((sample_name, label, frame), f)
+        pickle.dump((sample_name, label, frame, video_path), f)
     print("Write: " + os.path.join(output_data_folder_path, 'val_label.pkl').replace('\\', '/'))
 
 def generate_debug_light_dataset():
@@ -758,19 +846,20 @@ if __name__ == '__main__':
 
     # ''' 5: align frame to 300 (but not change shape to N C T V M format) '''
     x = np.load(os.path.join(processing_folder_path, 'X_global_data_to_align.npy').replace('\\', '/'), allow_pickle=True)
+    x_bbox = np.load(os.path.join(processing_folder_path, 'X_global_bbox_to_align.npy').replace('\\', '/'), allow_pickle=True)
     f = open(os.path.join(processing_folder_path, 'Y_global_data.json').replace('\\', '/'), )
     y = json.load(f)
     MAX_FRAME = int(arg.padding_frame)
-    align_frames(x, y)
+    align_frames(x, x_bbox, y)
 
     # ''' 6: split into TR and TSET set '''
     split_TRAIN_TEST()
 
     # ''' 7: generate debug light version data '''
-    generate_debug_light_dataset()
+    #generate_debug_light_dataset()
 
     # ''' 8: view data info '''
     # view_data_info(light_version = True)
-    view_data_info(light_version= False)
+    #view_data_info(light_version= False)
 
     print("Finished")
