@@ -259,7 +259,8 @@ def process_raw_data_by_clip(folder_name, path_dir):
                         trimmed_file_name = file_name.split('.')[0][7:]
                         action_id = le.transform([ref_action])[0].item()
                         sample_name = trimmed_file_name + '-' + str(ref_id)
-                        dict_ske = {'action': ref_action, 'id_action': action_id, 'skeleton': data, 'bbox': person_action_bbox, 'id_person': ref_id, 'frame': person_action_frame, 'file_name': file_name, 'folder_name': folder_name, 'sample_name': sample_name}
+                        video_path = folder_name + '/' + trimmed_file_name + '.mp4'
+                        dict_ske = {'action': ref_action, 'id_action': action_id, 'skeleton': data, 'bbox': person_action_bbox, 'video_path': video_path, 'id_person': ref_id, 'frame': person_action_frame, 'file_name': file_name, 'folder_name': folder_name, 'sample_name': sample_name}
 
                         # collect all the appeared (id, action) dictionaries to "dict_list_clip"
                         dict_list_clip.append(dict_ske)
@@ -462,7 +463,7 @@ def split_dict_to_data_label_clip(filename):
         for s in i:
             list_data.append(s['skeleton'])
             list_bbox.append(s.get('bbox', []))
-            list_label.append({'action': s['action'], 'id_action': s['id_action'], 'file_name': s['file_name'], 'id_person': s['id_person'], 'frame': s['frame'], 'folder_name': s['folder_name'], 'sample_name': s['sample_name']})
+            list_label.append({'action': s['action'], 'id_action': s['id_action'], 'file_name': s['file_name'], 'id_person': s['id_person'], 'frame': s['frame'], 'folder_name': s['folder_name'], 'sample_name': s['sample_name'], 'video_path': s.get('video_path')})
 
     list_data = np.array(list_data, dtype=object)
     list_bbox = np.array(list_bbox, dtype=object)
@@ -561,17 +562,20 @@ def split_TRAIN_TEST():
     final_sample_name = []
     final_label = []
     final_frame = []
+    final_video_path = []
     for _, l_item in enumerate(y_train):
         final_sample_name.append(l_item['sample_name'])
         final_label.append(l_item['id_action'])
         final_frame.append(l_item['frame'])
+        final_video_path.append(l_item.get('video_path'))
 
     sample_name = final_sample_name
     label = final_label
     frame = final_frame
+    video_path = final_video_path
 
     with open(os.path.join(output_data_folder_path, 'train_label.pkl').replace('\\', '/'), 'wb') as f:
-        pickle.dump((sample_name, label, frame), f)
+        pickle.dump((sample_name, label, frame, video_path), f)
     print("Write: " + os.path.join(output_data_folder_path, 'train_label.pkl').replace('\\', '/'))
 
     # TEST
@@ -591,44 +595,49 @@ def split_TRAIN_TEST():
     final_sample_name = []
     final_label = []
     final_frame = []
+    final_video_path = []
     for _, l_item in enumerate(y_test):
         final_sample_name.append(l_item['sample_name'])
         final_label.append(l_item['id_action'])
         final_frame.append(l_item['frame'])
+        final_video_path.append(l_item.get('video_path'))
     label = final_label
     sample_name = final_sample_name
     frame = final_frame
+    video_path = final_video_path
 
     with open(os.path.join(output_data_folder_path, 'val_label.pkl').replace('\\', '/'), 'wb') as f:
-        pickle.dump((sample_name, label, frame), f)
+        pickle.dump((sample_name, label, frame, video_path), f)
     print("Write: " + os.path.join(output_data_folder_path, 'val_label.pkl').replace('\\', '/'))
 
 def generate_debug_light_dataset():
     xx_tr = np.load(os.path.join(output_data_folder_path, 'train_data_joint.npy').replace('\\', '/'), allow_pickle=True)
     with open(os.path.join(output_data_folder_path, 'train_label.pkl').replace('\\', '/'), 'rb') as f:
-        tr_sample_name, tr_label, tr_frame= pickle.load(f)
+        tr_sample_name, tr_label, tr_frame, tr_video_path = pickle.load(f)
     xx_tr_light = xx_tr[:200]
     tr_sample_name_light = tr_sample_name[:200]
     tr_label_light = tr_label[:200]
     tr_frame_light = tr_frame[:200]
+    tr_video_path_light = tr_video_path[:200]
 
     with open(os.path.join(output_debug_data_folder_path, 'train_data_joint_light.npy').replace('\\', '/'), 'wb') as fout:
         np.save(fout, xx_tr_light)
     with open(os.path.join(output_debug_data_folder_path, 'train_label_light.pkl').replace('\\', '/'), 'wb') as f:
-        pickle.dump((tr_sample_name_light, tr_label_light, tr_frame_light), f)
+        pickle.dump((tr_sample_name_light, tr_label_light, tr_frame_light, tr_video_path_light), f)
 
     xx_test = np.load(os.path.join(output_data_folder_path, 'val_data_joint.npy').replace('\\', '/'), allow_pickle=True)
     with open(os.path.join(output_data_folder_path, 'val_label.pkl').replace('\\', '/'), 'rb') as f:
-        test_sample_name, test_label, test_frame = pickle.load(f)
+        test_sample_name, test_label, test_frame, test_video_path = pickle.load(f)
     xx_test_light = xx_test[:100]
     test_sample_name_light = test_sample_name[:100]
     test_label_light = test_label[:100]
     test_frame_light = test_frame[:100]
+    test_video_path_light = test_video_path[:100]
 
     with open(os.path.join(output_debug_data_folder_path, 'val_data_joint_light.npy').replace('\\', '/'), 'wb') as fout:
         np.save(fout, xx_test_light)
     with open(os.path.join(output_debug_data_folder_path, 'val_label_light.pkl').replace('\\', '/'), 'wb') as f:
-        pickle.dump((test_sample_name_light, test_label_light, test_frame_light), f)
+        pickle.dump((test_sample_name_light, test_label_light, test_frame_light, test_video_path_light), f)
 
 def view_data_info(light_version = False):
     if (light_version == False):
@@ -636,23 +645,25 @@ def view_data_info(light_version = False):
         xx_tr = np.load(os.path.join(output_data_folder_path, 'train_data_joint.npy').replace('\\', '/'), allow_pickle=True)
         bb_tr = np.load(os.path.join(output_data_folder_path, 'train_bbox.npy').replace('\\', '/'), allow_pickle=True)
         with open(os.path.join(output_data_folder_path, 'train_label.pkl').replace('\\', '/'), 'rb') as f:
-            tr_sample_name, tr_label, tr_frame = pickle.load(f)
+            tr_sample_name, tr_label, tr_frame, tr_video_path = pickle.load(f)
         print("TR X shape: " + str(xx_tr.shape))
         print("TR BBOX shape: " + str(bb_tr.shape))
         print("TR label len: " + str(len(tr_label)))
         print("TR sample name len: " + str(len(tr_sample_name)))
         print("TR frame len: " + str(len(tr_frame)))
+        print("TR video path len: " + str(len(tr_video_path)))
         # print(tr_label[-100:])
 
         xx_test = np.load(os.path.join(output_data_folder_path, 'val_data_joint.npy').replace('\\', '/'), allow_pickle=True)
         bb_test = np.load(os.path.join(output_data_folder_path, 'val_bbox.npy').replace('\\', '/'), allow_pickle=True)
         with open(os.path.join(output_data_folder_path, 'val_label.pkl').replace('\\', '/'), 'rb') as f:
-            test_sample_name, test_label, test_frame = pickle.load(f)
+            test_sample_name, test_label, test_frame, test_video_path = pickle.load(f)
         print("TEST X shape: " + str(xx_test.shape))
         print("TEST BBOX shape: " + str(bb_test.shape))
         print("TEST label len: " + str(len(test_label)))
         print("TEST sample name len: " + str(len(test_sample_name)))
         print("TEST frame len: " + str(len(test_frame)))
+        print("TEST video path len: " + str(len(test_video_path)))
         # print(test_label)
 
     else:
@@ -660,19 +671,21 @@ def view_data_info(light_version = False):
         print("#### Debug light version data ####")
         xx_tr = np.load(os.path.join(output_debug_data_folder_path, 'train_data_joint_light.npy').replace('\\', '/'), allow_pickle=True)
         with open(os.path.join(output_debug_data_folder_path, 'train_label_light.pkl').replace('\\', '/'), 'rb') as f:
-            tr_sample_name, tr_label, tr_frame = pickle.load(f)
+            tr_sample_name, tr_label, tr_frame, tr_video_path = pickle.load(f)
         print("TR light X shape: " + str(xx_tr.shape))
         print("TR light label len: " + str(len(tr_label)))
         print("TR light sample name len: " + str(len(tr_sample_name)))
         print("TR light frame len: " + str(len(tr_frame)))
+        print("TR light video path len: " + str(len(tr_video_path)))
 
         xx_test = np.load(os.path.join(output_debug_data_folder_path, 'val_data_joint_light.npy').replace('\\', '/'), allow_pickle=True)
         with open(os.path.join(output_debug_data_folder_path, 'val_label_light.pkl').replace('\\', '/'), 'rb') as f:
-            test_sample_name, test_label, test_frame = pickle.load(f)
+            test_sample_name, test_label, test_frame, test_video_path = pickle.load(f)
         print("TEST light X shape: " + str(xx_test.shape))
         print("TEST light label len: " + str(len(test_label)))
         print("TEST light sample name len: " + str(len(test_sample_name)))
         print("TEST frame len: " + str(len(test_frame)))
+        print("TEST video path len: " + str(len(test_video_path)))
 
 
 def get_parser():
