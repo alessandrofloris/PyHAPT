@@ -403,9 +403,10 @@ def interpolate_missed_joints(data, num_clip, num_seq):
 def merge_data_clip(folder_to_merge, recovered=True):
     clip_global_data_path = os.path.join(processing_folder_path, 'clip_global_data.json').replace('\\', '/')
     if recovered == False:
-        copyfile(path_write + '/action_clip_folder/cleaning_clip_folder.json', clip_global_data_path)
+        source_folder = os.path.join(path_write, 'action_clip_folder').replace('\\', '/')
     else:
-        copyfile(path_write + '/action_clip_recovered_folder/cleaning_clip_folder.json', clip_global_data_path)
+        source_folder = os.path.join(path_write, 'action_clip_recovered_folder').replace('\\', '/')
+    copyfile(os.path.join(source_folder, 'cleaning_clip_folder.json').replace('\\', '/'), clip_global_data_path)
 
     f_global = open(clip_global_data_path, )
     global_data = json.load(f_global)
@@ -415,7 +416,7 @@ def merge_data_clip(folder_to_merge, recovered=True):
 
     # merge every action folder
     for folder_filename in folder_to_merge:
-        folder_action_path = os.path.join(path_write, 'action_clip_folder', folder_filename + '_clip_folder.json').replace('\\', '/')
+        folder_action_path = os.path.join(source_folder, folder_filename + '_clip_folder.json').replace('\\', '/')
         f_folder = open(folder_action_path, )
         folder_data = json.load(f_folder)
 
