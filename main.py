@@ -235,9 +235,10 @@ def process_raw_data_by_clip(folder_name, path_dir):
                                 for kk in np.arange(NUM_JOINTS):
                                     x = j['keypoints'][3 * kk]
                                     y = j['keypoints'][3 * kk + 1]
-                                    if j['keypoints'][3 * kk + 2] == 0:
+                                    score = j['keypoints'][3 * kk + 2]
+                                    if score == 0:
                                         invalid_count += 1
-                                    person_data.append([x, y])
+                                    person_data.append([x, y, score])
 
                                 # add this frame's the (id, action) data to "data" list only if detected joints >= 10
                                 # if NUM_JOINTS - invalid_count >= THRESHOLD_VALID_FRAME:
@@ -310,22 +311,28 @@ def interpolate_missed_joints(data, num_clip, num_seq):
     data[num_clip][num_seq]['skeleton'] = np.array(data[num_clip][num_seq]['skeleton'])
     current_x_lst = []
     current_y_lst = []
+    current_s_lst = []
     # for each frame of a sequence
     for i, item in enumerate(data[num_clip][num_seq]['skeleton']):
         x_raw = item[:, 0]
         y_raw = item[:, 1]
+        s_raw = item[:, 2]
         current_x_lst.append(x_raw)
         current_y_lst.append(y_raw)
+        current_s_lst.append(s_raw)
 
     current_x_lst = np.array(current_x_lst)
     current_y_lst = np.array(current_y_lst)
+    current_s_lst = np.array(current_s_lst)
 
     # Replace <= 0 values to 0
     current_x_lst = np.where(current_x_lst <= 0, 0, current_x_lst)
     current_y_lst = np.where(current_y_lst <= 0, 0, current_y_lst)
+    current_s_lst = np.where(current_s_lst <= 0, 0, current_s_lst)
 
     current_x_df = pd.DataFrame(current_x_lst)
     current_y_df = pd.DataFrame(current_y_lst)
+    current_s_df = pd.DataFrame(current_s_lst)
 
     # Firstly, understand which joints should not be interpolated
     # Search row index where joint 13, 14, 15, 16 are missed due to the partially visible body
@@ -366,6 +373,8 @@ def interpolate_missed_joints(data, num_clip, num_seq):
     current_x_df = current_x_df.interpolate(method="linear", axis='index')
     current_y_df[current_y_df <= 0] = np.nan
     current_y_df = current_y_df.interpolate(method="linear", axis='index')
+    current_s_df[current_s_df <= 0] = np.nan
+    current_s_df = current_s_df.interpolate(method="linear", axis='index')
 
     # Reset the partial missed body to 0 which should not be interpolated
     ### Reset for case 1
@@ -378,6 +387,10 @@ def interpolate_missed_joints(data, num_clip, num_seq):
     current_y_df[14][idx_row_partial_body] = 0
     current_y_df[15][idx_row_partial_body] = 0
     current_y_df[16][idx_row_partial_body] = 0
+    current_s_df[13][idx_row_partial_body] = 0
+    current_s_df[14][idx_row_partial_body] = 0
+    current_s_df[15][idx_row_partial_body] = 0
+    current_s_df[16][idx_row_partial_body] = 0
 
     ### Reset for case 2: miss feet joints at the end of the clip
     if frame_miss_at_end == True:
@@ -386,15 +399,18 @@ def interpolate_missed_joints(data, num_clip, num_seq):
 
         current_y_df[15][idx_row_miss_feet] = 0
         current_y_df[16][idx_row_miss_feet] = 0
+        current_s_df[15][idx_row_miss_feet] = 0
+        current_s_df[16][idx_row_miss_feet] = 0
 
     current_x_df = current_x_df.replace(np.nan, 0)
     current_y_df = current_y_df.replace(np.nan, 0)
+    current_s_df = current_s_df.replace(np.nan, 0)
 
     # Start to re-assign the interpolated value to the original array
     for index_frame, row in current_x_df.iterrows():
         # 17 joints per person
         for idx_joint in range(17):
-            l = np.array([row[idx_joint], current_y_df[idx_joint][index_frame]])
+            l = np.array([row[idx_joint], current_y_df[idx_joint][index_frame], current_s_df[idx_joint][index_frame]])
             data[num_clip][num_seq]['skeleton'][index_frame][idx_joint] = l
 
     data[num_clip][num_seq]['skeleton'] = data[num_clip][num_seq]['skeleton'].tolist()
@@ -478,7 +494,7 @@ def align_frames(data, label):
             label[seq_idx]['frame'] = label[seq_idx]['frame'] * num_repeat
             label[seq_idx]['frame'] = label[seq_idx]['frame'] + label[seq_idx]['frame'][0:padding]
 
-        if data[seq_idx].shape != (300, 17, 2):
+        if data[seq_idx].shape != (MAX_FRAME, 17, 3):
             aligned = False
             print("seq_idx: {} is not correct aligned with {}".format(seq_idx, MAX_FRAME))
 
