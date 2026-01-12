@@ -437,8 +437,10 @@ def interpolate_missed_joints(data, num_clip, num_seq):
             avg_visibility = s_vals.mean(axis=1)
             motion_proxy = np.zeros(num_frames)
             if num_frames > 1:
-                dx = x_vals[1:] - x_vals[:-1]
-                dy = y_vals[1:] - y_vals[:-1]
+                x_norm = x_vals / 1920.0
+                y_norm = y_vals / 1080.0
+                dx = x_norm[1:] - x_norm[:-1]
+                dy = y_norm[1:] - y_norm[:-1]
                 dist = np.sqrt((dx * dx) + (dy * dy))
                 motion_proxy[1:] = dist.mean(axis=1)
 
