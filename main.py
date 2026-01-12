@@ -387,7 +387,7 @@ def interpolate_missed_joints(data, num_clip, num_seq):
     current_y_df[current_y_df <= 0] = np.nan
     current_y_df = current_y_df.interpolate(method="linear", axis='index')
     current_s_df[current_s_df <= 0] = np.nan
-    current_s_df = current_s_df.interpolate(method="linear", axis='index')
+    current_s_df = current_s_df.fillna(0.15)
 
     # Reset the partial missed body to 0 which should not be interpolated
     ### Reset for case 1
