@@ -107,11 +107,11 @@ def analyze_distributions(mode="train", data_dir="../data/output/"):
     print(mean_areas)
     
     if (mean_areas.max() - mean_areas.min()) > 0.1: # Threshold example
-        print("⚠️ WARNING: Significant scale difference detected between classes!")
+        print("WARNING: Significant scale difference detected between classes!")
         print(f"Smallest class: {mean_areas.idxmin()} ({mean_areas.min():.4f})")
         print(f"Largest class:  {mean_areas.idxmax()} ({mean_areas.max():.4f})")
     else:
-        print("✅ Subject sizes appear balanced across classes.")
+        print("Subject sizes appear balanced across classes.")
 
 if __name__ == "__main__":
     analyze_distributions(mode="train", data_dir="../data/output/")

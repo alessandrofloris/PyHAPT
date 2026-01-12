@@ -2,7 +2,7 @@ import os
 import json
 from pathlib import Path
 
-def validate_json_folder(root_dir):
+def validate_json_folder(root_dir="../raw_data/"):
     print(f"--- Starting JSON Integrity Check in: {root_dir} ---")
     
     # Find all JSON files in the directory and subdirectories
@@ -21,7 +21,7 @@ def validate_json_folder(root_dir):
             with open(file_path, 'r', encoding='utf-8') as f:
                 json.load(f)
         except (json.JSONDecodeError, OSError) as e:
-            print(f"\n❌ CORRUPTED FILE FOUND: {file_path}")
+            print(f"\nCORRUPTED FILE FOUND: {file_path}")
             print(f"Error: {e}")
             corrupted_files.append(str(file_path))
 
@@ -36,8 +36,9 @@ def validate_json_folder(root_dir):
         print("The list of corrupted files has been saved in 'corrupted_json_list.txt'.")
         
     else:
-        print("✅ All JSON files are valid! You can safely run the main pipeline.")
+        print("All JSON files are valid!")
 
 if __name__ == "__main__":
-    raw_data_path = "D:/Dataset_POLIMI-ITW-S/annotation_skeleton_bbox_label" 
-    validate_json_folder(raw_data_path)
+    #raw_data_path = "your path to raw data" 
+    #validate_json_folder(raw_data_path)
+    validate_json_folder()
