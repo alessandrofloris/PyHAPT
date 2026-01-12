@@ -236,12 +236,14 @@ def process_raw_data_by_clip(folder_name, path_dir):
                             if ref_id == j['id_'] and ref_action == j['action']:
                                 person_data = []
                                 invalid_count = 0
+                                score_sum = 0
                                 for kk in np.arange(NUM_JOINTS):
                                     x = j['keypoints'][3 * kk]
                                     y = j['keypoints'][3 * kk + 1]
                                     score = j['keypoints'][3 * kk + 2]
                                     if score == 0:
                                         invalid_count += 1
+                                    score_sum += score
                                     person_data.append([x, y, score])
 
                                 # add this frame's the (id, action) data to "data" list only if detected joints >= 10
@@ -252,7 +254,8 @@ def process_raw_data_by_clip(folder_name, path_dir):
                                     person_action_frame.append(i['frame'])
                                     person_action_bbox.append(j['bbox'])
                                     bbox_area = j['bbox'][2] * j['bbox'][3]
-                                    person_action_crowd_features.append([bbox_area / FRAME_AREA])
+                                    avg_visibility = score_sum / NUM_JOINTS
+                                    person_action_crowd_features.append([bbox_area / FRAME_AREA, avg_visibility])
 
                                 # do not need to continue search the same pair (id, action) in this frame, directly go to the next frame
                                 # because in the same frame there is no two same (id, action)
@@ -424,6 +427,16 @@ def interpolate_missed_joints(data, num_clip, num_seq):
             data[num_clip][num_seq]['skeleton'][index_frame][idx_joint] = l
 
     data[num_clip][num_seq]['skeleton'] = data[num_clip][num_seq]['skeleton'].tolist()
+    if 'bbox' in data[num_clip][num_seq]:
+        bboxes = data[num_clip][num_seq].get('bbox', [])
+        if len(bboxes) == len(current_s_df.index):
+            crowd_features = []
+            for index_frame, row in current_s_df.iterrows():
+                bbox = bboxes[index_frame]
+                bbox_area = bbox[2] * bbox[3] if len(bbox) >= 4 else 0
+                avg_visibility = float(row.mean())
+                crowd_features.append([bbox_area / FRAME_AREA, avg_visibility])
+            data[num_clip][num_seq]['crowd_features'] = crowd_features
 
 ''' 3 step: merge folder data '''
 def merge_data_clip(folder_to_merge, recovered=True):
@@ -542,7 +555,7 @@ def align_frames(data, label, bbox=None, crowd_features=None):
         if bbox is not None and bbox[seq_idx].shape != (MAX_FRAME, 4):
             aligned = False
             print("seq_idx: {} bbox is not correct aligned with {}".format(seq_idx, MAX_FRAME))
-        if crowd_features is not None and crowd_features[seq_idx].shape != (MAX_FRAME, 1):
+        if crowd_features is not None and crowd_features[seq_idx].shape != (MAX_FRAME, 2):
             aligned = False
             print("seq_idx: {} crowd features are not correct aligned with {}".format(seq_idx, MAX_FRAME))
 
