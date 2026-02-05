@@ -460,32 +460,31 @@ def interpolate_missed_joints(data, num_clip, num_seq):
 
 ''' 3 step: merge folder data '''
 def merge_data_clip(folder_to_merge, recovered=True):
+    # Paths setup
+    source_subfolder = 'action_clip_recovered_folder' if recovered else 'action_clip_folder'
+    source_folder = os.path.join(path_write, source_subfolder).replace('\\', '/')
     clip_global_data_path = os.path.join(processing_folder_path, 'clip_global_data.json').replace('\\', '/')
-    if recovered == False:
-        source_folder = os.path.join(path_write, 'action_clip_folder').replace('\\', '/')
-    else:
-        source_folder = os.path.join(path_write, 'action_clip_recovered_folder').replace('\\', '/')
-    copyfile(os.path.join(source_folder, 'cleaning_clip_folder.json').replace('\\', '/'), clip_global_data_path)
 
-    f_global = open(clip_global_data_path, )
-    global_data = json.load(f_global)
+    # 2. Initialization of global list
+    global_data = []
 
-    # since 'clip_global_data.json' starts with 'cleaning', so don't need merge it.
-    folder_to_merge.remove('cleaning')
-
-    # merge every action folder
+    # 3. Loop through each folder and merge data
     for folder_filename in folder_to_merge:
-        folder_action_path = os.path.join(source_folder, folder_filename + '_clip_folder.json').replace('\\', '/')
-        f_folder = open(folder_action_path, )
-        folder_data = json.load(f_folder)
+        file_path = os.path.join(source_folder, folder_filename + '_clip_folder.json').replace('\\', '/')
+        
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                try:
+                    folder_data = json.load(f)
+                    # Merge file and global data
+                    global_data += folder_data 
+                except json.JSONDecodeError:
+                    print(f"Error: file {file_path} is not a valid JSON.")
+        else:
+            print(f"Warning: The file {file_path} does not exist, skipping...")
 
-        global_data = global_data + folder_data
-
-    with open(processing_folder_path + '/clip_global_data.json', 'w') as fout:
+    with open(clip_global_data_path, 'w') as fout:
         json.dump(global_data, fout)
-
-    f_global.close()
-    f_folder.close()
 
 ''' 4 step: Store data X and label Y into disk'''
 def split_dict_to_data_label_clip(filename):
